@@ -1,6 +1,6 @@
-(ns atdixon-verify.core-spec
+(ns elliptic-signature.core-spec
   (:require [speclj.core :refer :all]
-            [atdixon-verify.core :refer :all])
+            [elliptic-signature.core :refer :all])
   (:import (java.nio.charset StandardCharsets)))
 
 (describe "verification"

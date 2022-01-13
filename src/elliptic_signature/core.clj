@@ -1,4 +1,4 @@
-(ns atdixon-verify.core
+(ns elliptic-signature.core
   (:import (java.util Arrays)
            (java.security MessageDigest)
            (java.nio.charset StandardCharsets)
