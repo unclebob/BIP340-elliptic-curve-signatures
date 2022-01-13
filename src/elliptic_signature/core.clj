@@ -133,31 +133,41 @@
       (aset result i (byte (bit-xor (aget a i) (aget b i)))))
     result))
 
-(defn pub-key [private-key]
-  (:x (mul G (biginteger* private-key))))
+(defn ^bytes pub-key [^bytes private-key]
+  (let [P (mul G (biginteger* private-key))]
+    (num->bytes 32 (:x P))))
+
+(declare verify)
 
 (defn sign [^bytes private-key ^bytes message]
-  (let [d- (biginteger* private-key)
-        P (mul G d-)
-        d (if (has-even-y P) d- (- n d-))
-        t (xor-bytes (num->bytes 32 d) aux-tag-hash)
-        rnd (sha-256 (|| nonce-tag-hash nonce-tag-hash
-                         t
-                         (num->bytes 32 (:x P))
-                         message))
-        k- (.mod (biginteger* rnd) n)
-        R (mul G k-)
-        k (if (has-even-y R) k- (- n k-))
-        e (.mod
-            (biginteger* (sha-256 (|| challenge-tag-hash challenge-tag-hash
-                                      (num->bytes 32 (:x R))
-                                      (num->bytes 32 (:x P))
-                                      message)))
-            n)
-        sig (|| (num->bytes 32 (:x R))
-                (num->bytes 32 (mod (+ k (* e d)) n)))
-        ]
-    sig))
+  (let [d- (biginteger* private-key)]
+    (if (or (= zero d-)
+            (>= d- n))
+      nil
+      (let [P (mul G d-)
+            d (if (has-even-y P) d- (- n d-))
+            t (xor-bytes (num->bytes 32 d) aux-tag-hash)
+            rnd (sha-256 (|| nonce-tag-hash nonce-tag-hash
+                             t
+                             (num->bytes 32 (:x P))
+                             message))
+            k- (.mod (biginteger* rnd) n)]
+        (if (= zero k-)
+          nil
+          (let [
+                R (mul G k-)
+                k (if (has-even-y R) k- (- n k-))
+                e (.mod
+                    (biginteger* (sha-256 (|| challenge-tag-hash challenge-tag-hash
+                                              (num->bytes 32 (:x R))
+                                              (num->bytes 32 (:x P))
+                                              message)))
+                    n)
+                sig (|| (num->bytes 32 (:x R))
+                        (num->bytes 32 (mod (+ k (* e d)) n)))]
+            (if (verify (num->bytes 32 (pub-key private-key)) message sig)
+              sig
+              nil)))))))
 
 
 

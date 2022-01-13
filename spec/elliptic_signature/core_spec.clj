@@ -54,8 +54,8 @@
   (it "signs"
     (let [private-key-1 (sha-256 (.getBytes "my private key 1" StandardCharsets/UTF_8))
           private-key-2 (sha-256 (.getBytes "my private key 2" StandardCharsets/UTF_8))
-          public-key-1 (num->bytes 32 (pub-key private-key-1))
-          public-key-2 (num->bytes 32 (pub-key private-key-2))
+          public-key-1 (pub-key private-key-1)
+          public-key-2 (pub-key private-key-2)
           message-1 (sha-256 (.getBytes "my message 1" StandardCharsets/UTF_8))
           message-2 (sha-256 (.getBytes "my message 2" StandardCharsets/UTF_8))
           sig-1 (sign private-key-1 message-1)
