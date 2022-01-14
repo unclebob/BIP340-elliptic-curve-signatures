@@ -139,6 +139,22 @@
 
 (declare verify)
 
+(defn make-e [R P message]
+  (.mod
+    (biginteger*
+      (sha-256
+        (|| challenge-tag-hash challenge-tag-hash
+            (num->bytes 32 (:x R))
+            (num->bytes 32 (:x P))
+            message)))
+    n))
+
+(defn make-rnd [t P message]
+  (sha-256 (|| nonce-tag-hash nonce-tag-hash
+               t
+               (num->bytes 32 (:x P))
+               message)))
+
 (defn sign [^bytes private-key ^bytes message]
   (let [d- (biginteger* private-key)]
     (if (or (= zero d-)
@@ -147,22 +163,13 @@
       (let [P (mul G d-)
             d (if (has-even-y P) d- (- n d-))
             t (xor-bytes (num->bytes 32 d) aux-tag-hash)
-            rnd (sha-256 (|| nonce-tag-hash nonce-tag-hash
-                             t
-                             (num->bytes 32 (:x P))
-                             message))
+            rnd (make-rnd t P message)
             k- (.mod (biginteger* rnd) n)]
         (if (= zero k-)
           nil
-          (let [
-                R (mul G k-)
+          (let [R (mul G k-)
                 k (if (has-even-y R) k- (- n k-))
-                e (.mod
-                    (biginteger* (sha-256 (|| challenge-tag-hash challenge-tag-hash
-                                              (num->bytes 32 (:x R))
-                                              (num->bytes 32 (:x P))
-                                              message)))
-                    n)
+                e (make-e R P message)
                 sig (|| (num->bytes 32 (:x R))
                         (num->bytes 32 (mod (+ k (* e d)) n)))]
             (if (verify (num->bytes 32 (pub-key private-key)) message sig)
