@@ -31,7 +31,7 @@
   [p]
   (or (nil? (:x p)) (nil? (:y p))))
 
-(defn add
+(defn- add
   [p1 p2]
   (let [^BigInteger x1 (:x p1)
         ^BigInteger y1 (:y p1)
@@ -57,7 +57,7 @@
             x3 (.mod (.subtract (.subtract (.multiply lam lam) x1) x2) p)]
         (->Point x3 (.mod (.subtract (.multiply lam (.subtract x1 x3)) y1) p))))))
 
-(defn mul
+(defn- mul
   [p ^BigInteger n]
   (loop [i 0 R infinity P p]
     (if (= i 256)
@@ -69,9 +69,11 @@
         (add P P)))))
 
 (defn sha-256
-  ^bytes [^bytes input]
+  "Returns the sha256 hash of the message.
+  Both the message and the hash are byte-arrays."
+  ^bytes [^bytes message]
   (let [digest (MessageDigest/getInstance "SHA-256")]
-    (.digest digest input)))
+    (.digest digest message)))
 
 (def ^bytes challenge-tag-hash
   (sha-256 (.getBytes "BIP0340/challenge" StandardCharsets/UTF_8)))
@@ -82,7 +84,10 @@
 (def ^bytes nonce-tag-hash
   (sha-256 (.getBytes "BIP0340/nonce" StandardCharsets/UTF_8)))
 
-(defn num->bytes [length n]
+(defn num->bytes
+  "Returns the byte-array representation of n.
+  The array will have the specified length."
+  [length n]
   (let [a (.toByteArray (biginteger n))
         l (count a)
         zeros (repeat (- length l) (byte 0))]
@@ -90,9 +95,10 @@
       (byte-array (drop (- l length) (seq a)))
       (byte-array (concat zeros a)))))
 
-(defn biginteger*
-  ^BigInteger [^bytes b]
-  (BigInteger. 1 b))
+(defn bytes->num
+  "Returns a BigInteger from a byte-array."
+  ^BigInteger [^bytes bytes]
+  (BigInteger. 1 bytes))
 
 (defn- lift-x
   [^BigInteger x]
@@ -112,17 +118,24 @@
       (System/arraycopy arr 0 rv offset (alength ^bytes arr)))
     rv))
 
-(defn bytes->string [byte-array]
+(defn bytes->hex-string
+  "Returns a string containing the hexadecimal
+  representation of the byte-array. This is the
+  inverse of hex-string->bytes."
+  [byte-array]
   (let [byte-seq (for [i (range (alength byte-array))] (aget byte-array i))
         byte-strings (map #(apply str (take-last 2 (format "%02x" %))) byte-seq)]
     (apply str (apply concat byte-strings))))
 
-(defn ^bytes hex-decode [s]
-  (let [byte-strings (map #(apply str %) (partition 2 s))
+(defn ^bytes hex-string->bytes
+  "returns a byte-array containing the bytes described
+  by the hex-string.  This is the inverse of bytes->hex-string."
+  [hex-string]
+  (let [byte-strings (map #(apply str %) (partition 2 hex-string))
         byte-vector (map #(Integer/parseInt % 16) byte-strings)]
     (byte-array byte-vector)))
 
-(defn has-even-y [point]
+(defn- has-even-y [point]
   (= 0 (mod (:y point) 2))
   )
 
@@ -133,15 +146,18 @@
       (aset result i (byte (bit-xor (aget a i) (aget b i)))))
     result))
 
-(defn ^bytes pub-key [^bytes private-key]
-  (let [P (mul G (biginteger* private-key))]
+(defn ^bytes pub-key
+  "returns the public-key for a given private key.
+  Both are byte-arrays."
+  [^bytes private-key]
+  (let [P (mul G (bytes->num private-key))]
     (num->bytes 32 (:x P))))
 
 (declare verify)
 
-(defn make-e [R P message]
+(defn- make-e [R P message]
   (.mod
-    (biginteger*
+    (bytes->num
       (sha-256
         (|| challenge-tag-hash challenge-tag-hash
             (num->bytes 32 (:x R))
@@ -149,14 +165,18 @@
             message)))
     n))
 
-(defn make-rnd [t P message]
+(defn- make-rnd [t P message]
   (sha-256 (|| nonce-tag-hash nonce-tag-hash
                t
                (num->bytes 32 (:x P))
                message)))
 
-(defn sign [^bytes private-key ^bytes message]
-  (let [d- (biginteger* private-key)]
+(defn sign
+  "Returns the 64 byte signature of the message
+  and the private key.  The message and the
+  private key are byte-arrays of length 32."
+  [^bytes private-key ^bytes message]
+  (let [d- (bytes->num private-key)]
     (if (or (= zero d-)
             (>= d- n))
       nil
@@ -164,7 +184,7 @@
             d (if (has-even-y P) d- (- n d-))
             t (xor-bytes (num->bytes 32 d) aux-tag-hash)
             rnd (make-rnd t P message)
-            k- (.mod (biginteger* rnd) n)]
+            k- (.mod (bytes->num rnd) n)]
         (if (= zero k-)
           nil
           (let [R (mul G k-)
@@ -179,20 +199,23 @@
 
 
 (defn verify
-  ;; @see https://bips.xyz/340#verification
+  "Returns true if the public-key proves that the message was
+  signed using the private key.  Otherwise returns nil.
+  The public-key and the message are byte-arrays of length 32.
+  The signature is a byte-array of length 64."
   [^bytes public-key ^bytes message ^bytes signature]
   (when (and
           (= 32 (alength ^bytes public-key) (alength ^bytes message))
           (= 64 (alength ^bytes signature)))
-    (when-let [P (lift-x (biginteger* public-key))]
+    (when-let [P (lift-x (bytes->num public-key))]
       (let [r-bytes (Arrays/copyOfRange signature 0 32)
-            r (biginteger* r-bytes)
-            s (biginteger* (Arrays/copyOfRange signature 32 64))]
+            r (bytes->num r-bytes)
+            s (bytes->num (Arrays/copyOfRange signature 32 64))]
         (when (and
                 (< (.compareTo r p) 0)
                 (< (.compareTo s n) 0))
           (let [e (.mod
-                    (biginteger*
+                    (bytes->num
                       (sha-256
                         (|| challenge-tag-hash challenge-tag-hash r-bytes public-key message))) n)
                 R (add (mul G s) (mul P (.subtract n e)))]
