@@ -222,7 +222,7 @@
             (when
               (and
                 (not= R infinity)
-                (zero? (.compareTo (.mod ^BigInteger (:y P) two) zero))
+                (zero? (.compareTo (.mod ^BigInteger (:y R) two) zero))
                 (zero? (.compareTo ^BigInteger (:x R) r)))
               true)))))))
 
